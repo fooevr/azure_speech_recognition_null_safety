@@ -23,7 +23,7 @@ class _SimpleRecognitionScreenState extends State<SimpleRecognitionScreen>
   void activateSpeechRecognizer() {
     // MANDATORY INITIALIZATION
     AzureSpeechRecognition.initialize(subKey, region,
-        lang: lang, timeout: timeout);
+        lang: lang, timeout: timeout, reference: 'Hello, how are you? Fine thank you, and you?');
 
     _speechAzure.setFinalTranscription((text) {
       // do what you want with your final transcription

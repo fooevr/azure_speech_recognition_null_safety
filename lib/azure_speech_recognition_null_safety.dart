@@ -21,6 +21,7 @@ class AzureSpeechRecognition {
   static String? _region;
   static String _lang = "en-EN";
   static String _timeout = "1000";
+  static String? _reference;
 
   // static String? _languageUnderstandingSubscriptionKey;
   // static String? _languageUnderstandingServiceRegion;
@@ -29,9 +30,10 @@ class AzureSpeechRecognition {
   /// default intitializer for almost every type except for the intent recognizer.
   /// Default language -> English
   AzureSpeechRecognition.initialize(String subKey, String region,
-      {String? lang, String? timeout}) {
+      {String? lang, String? timeout, String? reference}) {
     _subKey = subKey;
     _region = region;
+    _reference = reference;
     if (lang != null) _lang = lang;
     if (timeout != null) {
       if (int.parse(timeout) >= 100 && int.parse(timeout) <= 5000) {
@@ -118,7 +120,8 @@ class AzureSpeechRecognition {
         'language': _lang,
         'subscriptionKey': _subKey,
         'region': _region,
-        'timeout': _timeout
+        'timeout': _timeout,
+        'reference': _reference
       });
     } else {
       throw "Error: SpeechRecognitionParameters not initialized correctly";

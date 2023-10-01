@@ -32,8 +32,9 @@ public class SwiftAzureSpeechRecognitionPlugin: NSObject, FlutterPlugin {
             let serviceRegion = args?["region"] ?? ""
             let lang = args?["language"] ?? ""
             let timeoutMs = args?["timeout"] ?? ""
+            let reference = args?["reference"]
             print("Called simpleVoice")
-            simpleSpeechRecognition(speechSubscriptionKey: speechSubscriptionKey, serviceRegion: serviceRegion, lang: lang, timeoutMs: timeoutMs)
+            simpleSpeechRecognition(speechSubscriptionKey: speechSubscriptionKey, serviceRegion: serviceRegion, lang: lang, timeoutMs: timeoutMs, reference: reference)
         }
         else if (call.method == "continuousStream") {
             let speechSubscriptionKey = args?["subscriptionKey"] ?? ""
@@ -59,7 +60,7 @@ public class SwiftAzureSpeechRecognitionPlugin: NSObject, FlutterPlugin {
         }
     }
     
-    public func simpleSpeechRecognition(speechSubscriptionKey : String, serviceRegion : String, lang: String, timeoutMs: String) {
+    public func simpleSpeechRecognition(speechSubscriptionKey : String, serviceRegion : String, lang: String, timeoutMs: String, reference: String?) {
         print("Created new recognition task")
         let taskId = UUID().uuidString;
         let task = Task {
@@ -82,13 +83,30 @@ public class SwiftAzureSpeechRecognitionPlugin: NSObject, FlutterPlugin {
             let audioConfig = SPXAudioConfiguration()
             let reco = try! SPXSpeechRecognizer(speechConfiguration: speechConfig!, audioConfiguration: audioConfig)
             
+            if(reference != nil){
+                let pron = try! SPXPronunciationAssessmentConfiguration(reference!,
+                                                                        gradingSystem: SPXPronunciationAssessmentGradingSystem.hundredMark,
+                                                                        granularity: SPXPronunciationAssessmentGranularity.phoneme,
+                                                                        enableMiscue: true
+                );
+                pron.phonemeAlphabet = "IPA";
+                try! pron.apply(to: reco);
+            }
+            
+            
             reco.addRecognizingEventHandler() {reco, evt in
                 if (self.simpleRecognitionTasks[taskId]?.isCanceled ?? false) { // Discard intermediate results if the task was cancelled
                     print("Ignoring partial result. TaskID: \(taskId)")
                 }
                 else {
                     print("Intermediate result: \(evt.result.text ?? "(no result)")\nTaskID: \(taskId)")
-                    self.azureChannel.invokeMethod("speech.onSpeech", arguments: evt.result.text)
+                    guard let pronunciationResult = SPXPronunciationAssessmentResult(evt.result) else {
+                                    print("Error: pronunciationResult is Nil")
+                                    return
+                                }
+                    DispatchQueue.main.async{
+                        self.azureChannel.invokeMethod("speech.onSpeech", arguments: evt.result.text)
+                    }
                 }
             }
             
@@ -101,10 +119,22 @@ public class SwiftAzureSpeechRecognitionPlugin: NSObject, FlutterPlugin {
                     let cancellationDetails = try! SPXCancellationDetails(fromCanceledRecognitionResult: result)
                     print("Cancelled: \(cancellationDetails.description), \(cancellationDetails.errorDetails)\nTaskID: \(taskId)")
                     print("Did you set the speech resource key and region values?")
-                    self.azureChannel.invokeMethod("speech.onFinalResponse", arguments: "")
+                    
+                    DispatchQueue.main.async{
+                        self.azureChannel.invokeMethod("speech.onFinalResponse", arguments: "")
+                    }
                 }
                 else {
-                    self.azureChannel.invokeMethod("speech.onFinalResponse", arguments: result.text)
+                    if(reference != nil){
+                        let pron = result.properties?.getPropertyBy(SPXPropertyId.speechServiceResponseJsonResult);
+                        DispatchQueue.main.async{
+                            self.azureChannel.invokeMethod("speech.onFinalResponse", arguments: pron);
+                        }
+                    }else{
+                        DispatchQueue.main.async{
+                            self.azureChannel.invokeMethod("speech.onFinalResponse", arguments: result.text)
+                        }
+                    }
                 }
                 
             }
